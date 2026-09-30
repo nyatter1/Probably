@@ -65,10 +65,25 @@ function createRemotePlayerGroup(p: ActiveServerPlayer): {
   rightLeg: THREE.Group;
 } {
   const group = new THREE.Group();
+  const c = p.colors || {
+    head: '#f5cd2f',
+    torso: '#0d69ac',
+    leftArm: '#f5cd2f',
+    rightArm: '#f5cd2f',
+    leftLeg: '#a0a528',
+    rightLeg: '#a0a528',
+  };
+
+  if (Array.isArray(p.position) && p.position.length >= 3) {
+    group.position.set(p.position[0], p.position[1], p.position[2]);
+  } else {
+    group.position.set(0, 3.0, 0);
+  }
+  group.rotation.y = typeof p.rotationY === 'number' ? p.rotationY : Math.PI;
 
   // Head
   const headGeo = new THREE.SphereGeometry(0.6, 16, 16);
-  const headMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(p.colors.head), roughness: 0.35 });
+  const headMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(c.head || '#f5cd2f'), roughness: 0.35 });
   const headMesh = new THREE.Mesh(headGeo, headMat);
   headMesh.position.set(0, 1.2, 0);
   headMesh.castShadow = true;
@@ -79,7 +94,7 @@ function createRemotePlayerGroup(p: ActiveServerPlayer): {
   canvas.width = 128;
   canvas.height = 128;
   const ctx = canvas.getContext('2d')!;
-  ctx.fillStyle = p.colors.head;
+  ctx.fillStyle = c.head || '#f5cd2f';
   ctx.fillRect(0, 0, 128, 128);
   ctx.fillStyle = '#111';
   ctx.beginPath();
@@ -101,7 +116,7 @@ function createRemotePlayerGroup(p: ActiveServerPlayer): {
 
   // Torso
   const torsoGeo = new THREE.BoxGeometry(2, 2, 1);
-  const torsoMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(p.colors.torso), roughness: 0.35 });
+  const torsoMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(c.torso || '#0d69ac'), roughness: 0.35 });
   const torsoMesh = new THREE.Mesh(torsoGeo, torsoMat);
   torsoMesh.position.set(0, 0, 0);
   torsoMesh.castShadow = true;
@@ -111,7 +126,7 @@ function createRemotePlayerGroup(p: ActiveServerPlayer): {
   const leftArmGroup = new THREE.Group();
   leftArmGroup.position.set(-1.5, 0.9, 0);
   const armGeo = new THREE.BoxGeometry(1, 2, 1);
-  const leftArmMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(p.colors.leftArm), roughness: 0.35 });
+  const leftArmMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(c.leftArm || '#f5cd2f'), roughness: 0.35 });
   const leftArmMesh = new THREE.Mesh(armGeo, leftArmMat);
   leftArmMesh.position.set(0, -1, 0);
   leftArmMesh.castShadow = true;
@@ -121,7 +136,7 @@ function createRemotePlayerGroup(p: ActiveServerPlayer): {
   // Right Arm
   const rightArmGroup = new THREE.Group();
   rightArmGroup.position.set(1.5, 0.9, 0);
-  const rightArmMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(p.colors.rightArm), roughness: 0.35 });
+  const rightArmMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(c.rightArm || '#f5cd2f'), roughness: 0.35 });
   const rightArmMesh = new THREE.Mesh(armGeo, rightArmMat);
   rightArmMesh.position.set(0, -1, 0);
   rightArmMesh.castShadow = true;
@@ -132,7 +147,7 @@ function createRemotePlayerGroup(p: ActiveServerPlayer): {
   const leftLegGroup = new THREE.Group();
   leftLegGroup.position.set(-0.55, -1.0, 0);
   const legGeo = new THREE.BoxGeometry(1, 2, 1);
-  const leftLegMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(p.colors.leftLeg), roughness: 0.35 });
+  const leftLegMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(c.leftLeg || '#a0a528'), roughness: 0.35 });
   const leftLegMesh = new THREE.Mesh(legGeo, leftLegMat);
   leftLegMesh.position.set(0, -1, 0);
   leftLegMesh.castShadow = true;
@@ -142,7 +157,7 @@ function createRemotePlayerGroup(p: ActiveServerPlayer): {
   // Right Leg
   const rightLegGroup = new THREE.Group();
   rightLegGroup.position.set(0.55, -1.0, 0);
-  const rightLegMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(p.colors.rightLeg), roughness: 0.35 });
+  const rightLegMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(c.rightLeg || '#a0a528'), roughness: 0.35 });
   const rightLegMesh = new THREE.Mesh(legGeo, rightLegMat);
   rightLegMesh.position.set(0, -1, 0);
   rightLegMesh.castShadow = true;

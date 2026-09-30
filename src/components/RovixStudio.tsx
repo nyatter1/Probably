@@ -33,7 +33,8 @@ import {
   saveGame,
   deleteGame,
   toggleGamePublic,
-  updateGameIcon
+  updateGameIcon,
+  subscribeToLiveGames
 } from '../utils/gamesStorage.ts';
 import { validateRobloxTemplate } from '../utils/robloxClothingUV.ts';
 import RovixStudioEditor from './RovixStudioEditor.tsx';
@@ -83,6 +84,13 @@ export default function RovixStudio({
   // Storage states
   const [inventory, setInventory] = useState(getStoredInventory());
   const [games, setGames] = useState<SavedGame[]>(getSavedGames());
+
+  useEffect(() => {
+    const unsub = subscribeToLiveGames((liveGames) => {
+      setGames(liveGames);
+    });
+    return () => unsub();
+  }, []);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const thumbnailInputRef = useRef<HTMLInputElement>(null);

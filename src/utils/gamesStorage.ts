@@ -1,3 +1,5 @@
+import { db, collection, doc, setDoc, deleteDoc, onSnapshot } from './firebase.ts';
+
 export interface StudioScript {
   id: string;
   name: string;
@@ -1202,15 +1204,49 @@ export const DEFAULT_TEST_PLACE: SavedGame = {
   ],
 };
 
+let cachedLiveGames: SavedGame[] = [];
+
+export function subscribeToLiveGames(callback: (games: SavedGame[]) => void): () => void {
+  if (!db) {
+    callback(getSavedGames());
+    return () => {};
+  }
+
+  const colRef = collection(db, 'published_games');
+  return onSnapshot(
+    colRef,
+    (snapshot) => {
+      const list: SavedGame[] = [];
+      snapshot.forEach((docSnap) => {
+        const data = docSnap.data() as SavedGame;
+        if (data && data.id) {
+          list.push(data);
+        }
+      });
+
+      list.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+      cachedLiveGames = list;
+      saveGamesListToLocalStorage(list);
+      callback(list);
+    },
+    (err) => {
+      console.warn('Live games sync notice:', err);
+      callback(getSavedGames());
+    }
+  );
+}
+
 export function getSavedGames(): SavedGame[] {
+  if (cachedLiveGames.length > 0) {
+    return cachedLiveGames;
+  }
   try {
     const raw = safeGameStorage.getItem(STORAGE_KEY_GAMES);
-    if (!raw) {
-      return [];
-    }
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed)) {
-      return parsed;
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        return parsed;
+      }
     }
   } catch (e) {
     console.error('Failed to load games from localStorage:', e);
@@ -1218,12 +1254,16 @@ export function getSavedGames(): SavedGame[] {
   return [];
 }
 
-export function saveGamesList(games: SavedGame[]): void {
+function saveGamesListToLocalStorage(games: SavedGame[]): void {
   try {
     safeGameStorage.setItem(STORAGE_KEY_GAMES, JSON.stringify(games));
   } catch (e) {
     console.error('Failed to save games list to localStorage:', e);
   }
+}
+
+export function saveGamesList(games: SavedGame[]): void {
+  saveGamesListToLocalStorage(games);
 }
 
 export function getGameById(id: string): SavedGame | undefined {
@@ -1246,13 +1286,31 @@ export function saveGame(game: SavedGame): SavedGame {
     games.unshift(updatedGame);
   }
 
-  saveGamesList(games);
+  saveGamesListToLocalStorage(games);
+
+  // Sync Live to Firebase Firestore so ALL users see it on their site!
+  if (db) {
+    try {
+      setDoc(doc(db, 'published_games', game.id), updatedGame, { merge: true });
+    } catch (e) {
+      console.error('Error publishing game to Firestore:', e);
+    }
+  }
+
   return updatedGame;
 }
 
 export function deleteGame(id: string): void {
   const games = getSavedGames().filter((g) => g.id !== id);
-  saveGamesList(games);
+  saveGamesListToLocalStorage(games);
+
+  if (db) {
+    try {
+      deleteDoc(doc(db, 'published_games', id));
+    } catch (e) {
+      console.error('Error deleting game from Firestore:', e);
+    }
+  }
 }
 
 export function toggleGamePublic(id: string, isPublic: boolean): void {
@@ -1261,7 +1319,7 @@ export function toggleGamePublic(id: string, isPublic: boolean): void {
   if (game) {
     game.isPublic = isPublic;
     game.updatedAt = Date.now();
-    saveGamesList(games);
+    saveGame(game);
   }
 }
 
@@ -1271,6 +1329,6 @@ export function updateGameIcon(id: string, iconUrl: string): void {
   if (game) {
     game.iconUrl = iconUrl;
     game.updatedAt = Date.now();
-    saveGamesList(games);
+    saveGame(game);
   }
 }

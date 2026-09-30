@@ -157,11 +157,19 @@ export default function UserProfileView({
     });
   }
 
-  // Filter ONLY real creations we made (Button RNG & user creations), removing all placeholder test places
-  const userCreations = savedGames.filter(
-    (g) => g.id === 'click_the_button' || (!['test_place', 'clicker_pure_ui'].includes(g.id) && g.title !== 'Test Place' && g.title !== 'Click the button [BETA]' && g.title !== 'Clicker Game (Pure UI)')
-  );
-  const displayGames = userCreations.length > 0 ? userCreations : [CLICK_THE_BUTTON_PLACE];
+  // Filter real creations: Public experiences for everyone, plus private experiences if viewing own profile
+  const currentUserRaw = localStorage.getItem('rovix_current_user_v1');
+  const currentUserObj = currentUserRaw ? JSON.parse(currentUserRaw) : null;
+
+  const displayGames = savedGames.filter((g) => {
+    if (g.isPublic) return true;
+    const isCreator =
+      currentUserObj &&
+      (g.creatorId === currentUserObj.uid ||
+        g.creator === currentUserObj.username ||
+        g.creator === currentUserObj.displayName);
+    return isCreator;
+  });
 
   const handleSaveProfile = () => {
     setProfile(editForm);
@@ -268,8 +276,19 @@ export default function UserProfileView({
                   By <span className="hover:underline cursor-pointer">{selectedGame.creator || profile.username}</span>
                 </div>
 
-                <div className="text-xs text-neutral-400 mt-1">
-                  Maturity: Minimal • Ages 16+
+                <div className="flex items-center gap-2 mt-2">
+                  {selectedGame.isPublic ? (
+                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                      ● Public Experience
+                    </span>
+                  ) : (
+                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-red-500/20 text-red-400 border border-red-500/30">
+                      🔒 Private Experience
+                    </span>
+                  )}
+                  <span className="text-xs text-neutral-400">
+                    Maturity: Minimal • Ages 16+
+                  </span>
                 </div>
               </div>
 

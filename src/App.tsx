@@ -16,6 +16,7 @@ import {
   Sparkles,
   ShoppingBag,
   Image as ImageIcon,
+  EyeOff,
 } from 'lucide-react';
 import AvatarCanvas3D, { AvatarColors, BodyPart } from './components/AvatarCanvas3D.tsx';
 import ClothingManager from './components/ClothingManager.tsx';
@@ -34,7 +35,7 @@ import {
   getEquippedBackgroundItem,
 } from './utils/backgroundsStorage.ts';
 import { getSavedAvatar, saveAvatarToStorage, ClothingItem } from './utils/inventoryStorage.ts';
-import { SavedGame, getSavedGames, DEFAULT_TEST_PLACE } from './utils/gamesStorage.ts';
+import { SavedGame, getSavedGames, DEFAULT_TEST_PLACE, subscribeToLiveGames } from './utils/gamesStorage.ts';
 import AuthPage from './components/auth/AuthPage.tsx';
 import {
   auth,
@@ -144,6 +145,7 @@ function AppContent() {
 
   // Game Play & Loading State
   const [gameState, setGameState] = useState<'app' | 'loading' | 'playing'>('app');
+  const [privateGameError, setPrivateGameError] = useState<string | null>(null);
 
   // Avatar Body Part State
   const [selectedBodyPart, setSelectedBodyPart] = useState<BodyPart>('all');
@@ -173,6 +175,20 @@ function AppContent() {
       }
     });
     return () => unsub();
+  }, []);
+
+  // Sync Live Public Games from Firebase Firestore across all users & devices
+  useEffect(() => {
+    const unsubGames = subscribeToLiveGames((liveGames) => {
+      setSavedGames(liveGames);
+      if (liveGames.length > 0) {
+        setCurrentGame((prev) => {
+          const updated = liveGames.find((g) => g.id === prev.id);
+          return updated || liveGames[0];
+        });
+      }
+    });
+    return () => unsubGames();
   }, []);
 
   // Auto-save avatar whenever colors or clothes change
@@ -229,11 +245,25 @@ function AppContent() {
     }, 450);
   };
 
-  const handleLaunchGame = (game?: SavedGame) => {
-    if (game && typeof game === 'object' && 'id' in game) {
-      setCurrentGame(game);
+  const handleLaunchGame = (gameToLaunch?: SavedGame) => {
+    const targetGame = gameToLaunch || currentGame;
+    if (targetGame && typeof targetGame === 'object' && 'id' in targetGame) {
+      const isCreator =
+        currentUser &&
+        (targetGame.creatorId === currentUser.uid ||
+          targetGame.creator === currentUser.username ||
+          targetGame.creator === currentUser.displayName);
+
+      if (!targetGame.isPublic && !isCreator) {
+        setPrivateGameError(
+          `This experience is private. The creator of "${targetGame.title}" has set it to private. You cannot play or join this experience until the creator makes it public again.`
+        );
+        return;
+      }
+
+      setCurrentGame(targetGame);
+      setGameState('loading');
     }
-    setGameState('loading');
   };
 
   // Refresh saved games when user returns to home
@@ -535,7 +565,7 @@ function AppContent() {
         </aside>
 
         {/* MAIN VIEW AREA */}
-        <div className="flex-1 flex flex-col bg-[#191b1d] overflow-y-auto">
+        <div className="flex-1 flex flex-col bg-[#191b1d] overflow-y-auto pb-20 md:pb-0">
           {editingClothingItem ? (
             /* CONFIGURE / MANAGE ITEM VIEW (SCREENSHOT 1) */
             <ManageItemView
@@ -1040,6 +1070,87 @@ function AppContent() {
           )}
         </div>
       </div>
+
+      {/* Mobile App Navigation Dock (Fixed at bottom for mobile screens) */}
+      <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#161719]/95 backdrop-blur-lg border-t border-neutral-800 py-2.5 px-4 flex items-center justify-around text-xs text-neutral-400 select-none shadow-2xl">
+        <button
+          type="button"
+          onClick={() => setActiveTab('home')}
+          className={`flex flex-col items-center gap-1 transition-colors cursor-pointer ${
+            (activeTab as string) === 'home' ? 'text-white font-bold' : 'text-neutral-400 hover:text-neutral-200'
+          }`}
+        >
+          <Home className={`w-5 h-5 ${(activeTab as string) === 'home' ? 'text-blue-400' : ''}`} />
+          <span className="text-[10px]">Home</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('discover')}
+          className={`flex flex-col items-center gap-1 transition-colors cursor-pointer ${
+            (activeTab as string) === 'discover' ? 'text-white font-bold' : 'text-neutral-400 hover:text-neutral-200'
+          }`}
+        >
+          <Compass className={`w-5 h-5 ${(activeTab as string) === 'discover' ? 'text-blue-400' : ''}`} />
+          <span className="text-[10px]">Discover</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('avatar')}
+          className={`flex flex-col items-center gap-1 transition-colors cursor-pointer ${
+            (activeTab as string) === 'avatar' ? 'text-white font-bold' : 'text-neutral-400 hover:text-neutral-200'
+          }`}
+        >
+          <User className={`w-5 h-5 ${(activeTab as string) === 'avatar' ? 'text-blue-400' : ''}`} />
+          <span className="text-[10px]">Avatar</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('marketplace')}
+          className={`flex flex-col items-center gap-1 transition-colors cursor-pointer ${
+            (activeTab as string) === 'marketplace' ? 'text-white font-bold' : 'text-neutral-400 hover:text-neutral-200'
+          }`}
+        >
+          <ShoppingBag className={`w-5 h-5 ${(activeTab as string) === 'marketplace' ? 'text-blue-400' : ''}`} />
+          <span className="text-[10px]">Catalog</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('studio')}
+          className={`flex flex-col items-center gap-1 transition-colors cursor-pointer ${
+            (activeTab as string) === 'studio' ? 'text-white font-bold' : 'text-neutral-400 hover:text-neutral-200'
+          }`}
+        >
+          <Layers className={`w-5 h-5 ${(activeTab as string) === 'studio' ? 'text-blue-400' : ''}`} />
+          <span className="text-[10px]">Studio</span>
+        </button>
+      </div>
+      {/* Private Game Error Modal */}
+      {privateGameError && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in font-sans select-none">
+          <div className="bg-[#202225] border border-neutral-700/80 rounded-xl p-6 max-w-md w-full shadow-2xl space-y-4 text-center">
+            <div className="w-14 h-14 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-400 flex items-center justify-center mx-auto shadow-md">
+              <EyeOff className="w-7 h-7" />
+            </div>
+            <h2 className="text-xl font-extrabold text-white tracking-tight">This experience is private.</h2>
+            <p className="text-xs text-neutral-300 leading-relaxed">
+              {privateGameError}
+            </p>
+            <div className="pt-2">
+              <button
+                type="button"
+                onClick={() => setPrivateGameError(null)}
+                className="w-full py-2.5 bg-[#2b2d31] hover:bg-[#34373c] text-white font-semibold text-xs rounded-lg border border-neutral-600 transition-colors cursor-pointer shadow-sm"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
