@@ -1,0 +1,20 @@
+@import "tailwindcss";
+
+/* Roblox Desktop client dark scrollbars */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #191b1d;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #393b3d;
+  border-radius: 0px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #4b4e52;
+}

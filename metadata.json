@@ -1,0 +1,8 @@
+{
+  "name": "Remix Remix Remix Roblox Desktop Client",
+  "description": "Simplified dark-themed desktop home page with player Test123, sharp geometry, and interactive client buttons.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
