@@ -1186,11 +1186,18 @@ export default function GameWorld({
       // Render & LERP remote players smoothly
       if (sceneRef.current) {
         serverPlayers.forEach((p) => {
-          if (p.uid === myUid) return;
+          if (!p || !p.uid || p.uid === myUid) return;
+
+          const px = Array.isArray(p.position) && typeof p.position[0] === 'number' ? p.position[0] : 0;
+          const py = Array.isArray(p.position) && typeof p.position[1] === 'number' ? p.position[1] : 3.0;
+          const pz = Array.isArray(p.position) && typeof p.position[2] === 'number' ? p.position[2] : 0;
+          const protY = typeof p.rotationY === 'number' ? p.rotationY : Math.PI;
 
           let rData = remoteMeshesRef.current.get(p.uid);
           if (!rData) {
             const created = createRemotePlayerGroup(p);
+            created.group.position.set(px, py, pz);
+            created.group.rotation.y = protY;
             sceneRef.current?.add(created.group);
             rData = {
               group: created.group,
@@ -1198,18 +1205,18 @@ export default function GameWorld({
               rightArm: created.rightArm,
               leftLeg: created.leftLeg,
               rightLeg: created.rightLeg,
-              targetPos: new THREE.Vector3(...p.position),
-              targetRotY: p.rotationY,
-              isMoving: p.isMoving,
-              isGrounded: p.isGrounded,
+              targetPos: new THREE.Vector3(px, py, pz),
+              targetRotY: protY,
+              isMoving: Boolean(p.isMoving),
+              isGrounded: p.isGrounded !== false,
               walkTime: 0,
             };
             remoteMeshesRef.current.set(p.uid, rData);
           } else {
-            rData.targetPos.set(p.position[0], p.position[1], p.position[2]);
-            rData.targetRotY = p.rotationY;
-            rData.isMoving = p.isMoving;
-            rData.isGrounded = p.isGrounded;
+            rData.targetPos.set(px, py, pz);
+            rData.targetRotY = protY;
+            rData.isMoving = Boolean(p.isMoving);
+            rData.isGrounded = p.isGrounded !== false;
           }
 
           // Smooth 60fps LERP interpolation towards target position & angle
@@ -1244,7 +1251,7 @@ export default function GameWorld({
 
         // Cleanup left remote players
         remoteMeshesRef.current.forEach((rData, uid) => {
-          if (!serverPlayers.some((sp) => sp.uid === uid) || uid === myUid) {
+          if (!serverPlayers.some((sp) => sp && sp.uid === uid) || uid === myUid) {
             sceneRef.current?.remove(rData.group);
             remoteMeshesRef.current.delete(uid);
           }
