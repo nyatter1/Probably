@@ -122,7 +122,7 @@ function AppContent() {
   });
 
   const [activeTab, setActiveTab] = useState<'home' | 'discover' | 'profile' | 'avatar' | 'marketplace' | 'studio' | 'more'>('home');
-  const [editorSubTab, setEditorSubTab] = useState<'skin' | 'shirt' | 'pants' | 'backgrounds'>('skin');
+  const [editorSubTab, setEditorSubTab] = useState<'skin' | 'shirt' | 'pants' | 'backgrounds' | 'borders'>('skin');
   const [searchQuery, setSearchQuery] = useState('');
   const [showSettingsMenu, setShowSettingsMenu] = useState(false);
   const [selectedMarketplaceItem, setSelectedMarketplaceItem] = useState<MarketplaceItem | null>(null);
@@ -761,6 +761,19 @@ function AppContent() {
                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
                     )}
                   </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setEditorSubTab('borders')}
+                    className={`pb-2.5 flex items-center gap-2 font-medium whitespace-nowrap transition-colors border-b-2 ${
+                      editorSubTab === 'borders'
+                        ? 'text-amber-400 border-amber-400 font-semibold'
+                        : 'text-neutral-400 hover:text-white border-transparent'
+                    }`}
+                  >
+                    <Sparkles className="w-4 h-4 text-amber-400" />
+                    <span>Borders (Coming Soon)</span>
+                  </button>
                 </div>
 
                 {editorSubTab === 'skin' ? (
@@ -852,7 +865,7 @@ function AppContent() {
                     onOpenStudio={() => setActiveTab('studio')}
                     onEditItem={(item) => setEditingClothingItem(item)}
                   />
-                ) : (
+                ) : editorSubTab === 'backgrounds' ? (
                   <ProfileBackgroundManager
                     onOpenMarketplaceBackgrounds={() => {
                       setSelectedMarketplaceItem(null);
@@ -861,6 +874,21 @@ function AppContent() {
                     }}
                     onBackgroundEquippedChange={(url) => setEquippedBackgroundUrl(url)}
                   />
+                ) : (
+                  <div className="bg-[#202225] border border-neutral-800 p-8 rounded-xl text-center space-y-4 my-auto">
+                    <div className="w-14 h-14 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center mx-auto shadow-md">
+                      <Sparkles className="w-7 h-7" />
+                    </div>
+                    <h3 className="text-lg font-bold text-white">Avatar Borders &amp; Frames (Coming Soon)</h3>
+                    <p className="text-xs text-neutral-400 max-w-sm mx-auto leading-relaxed">
+                      Custom animated profile borders, neon avatar frames, and glowing edges will be available here to equip to your avatar profile!
+                    </p>
+                    <div className="pt-2">
+                      <span className="px-3 py-1 rounded-full bg-amber-500/20 border border-amber-500/30 text-amber-300 text-xs font-bold">
+                        Coming Soon
+                      </span>
+                    </div>
+                  </div>
                 )}
               </div>
             </div>

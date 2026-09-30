@@ -1,10 +1,26 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
+import { Users, ChevronDown, ChevronUp, Sparkles, Play } from 'lucide-react';
 import { applyRobloxClothingUV } from '../utils/robloxClothingUV.ts';
 import { AvatarColors } from './AvatarCanvas3D.tsx';
 import { SavedGame, StudioPart } from '../utils/gamesStorage.ts';
 import { LuaRuntime } from '../utils/luaEngine.ts';
 import RobloxGuiRenderer from './ui-engine/RobloxGuiRenderer.tsx';
+import { db, auth, doc, setDoc, deleteDoc, onSnapshot, collection } from '../utils/firebase.ts';
+
+export interface ActiveServerPlayer {
+  uid: string;
+  username: string;
+  displayName: string;
+  colors: AvatarColors;
+  shirtUrl: string | null;
+  pantsUrl: string | null;
+  position: [number, number, number];
+  rotationY: number;
+  isMoving: boolean;
+  isGrounded: boolean;
+  updatedAt: number;
+}
 
 interface GameWorldProps {
   game?: SavedGame;
@@ -41,6 +57,163 @@ interface WorldBox {
   canCollide: boolean;
 }
 
+function createRemotePlayerGroup(p: ActiveServerPlayer): {
+  group: THREE.Group;
+  leftArm: THREE.Group;
+  rightArm: THREE.Group;
+  leftLeg: THREE.Group;
+  rightLeg: THREE.Group;
+} {
+  const group = new THREE.Group();
+
+  // Head
+  const headGeo = new THREE.SphereGeometry(0.6, 16, 16);
+  const headMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(p.colors.head), roughness: 0.35 });
+  const headMesh = new THREE.Mesh(headGeo, headMat);
+  headMesh.position.set(0, 1.2, 0);
+  headMesh.castShadow = true;
+  group.add(headMesh);
+
+  // Face texture
+  const canvas = document.createElement('canvas');
+  canvas.width = 128;
+  canvas.height = 128;
+  const ctx = canvas.getContext('2d')!;
+  ctx.fillStyle = p.colors.head;
+  ctx.fillRect(0, 0, 128, 128);
+  ctx.fillStyle = '#111';
+  ctx.beginPath();
+  ctx.arc(38, 48, 8, 0, Math.PI * 2);
+  ctx.arc(90, 48, 8, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(64, 76, 20, 0, Math.PI);
+  ctx.lineWidth = 5;
+  ctx.strokeStyle = '#111';
+  ctx.stroke();
+
+  const faceTex = new THREE.CanvasTexture(canvas);
+  const faceGeo = new THREE.PlaneGeometry(0.7, 0.7);
+  const faceMat = new THREE.MeshBasicMaterial({ map: faceTex, transparent: true });
+  const faceMesh = new THREE.Mesh(faceGeo, faceMat);
+  faceMesh.position.set(0, 1.2, 0.58);
+  group.add(faceMesh);
+
+  // Torso
+  const torsoGeo = new THREE.BoxGeometry(2, 2, 1);
+  const torsoMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(p.colors.torso), roughness: 0.35 });
+  const torsoMesh = new THREE.Mesh(torsoGeo, torsoMat);
+  torsoMesh.position.set(0, 0, 0);
+  torsoMesh.castShadow = true;
+  group.add(torsoMesh);
+
+  // Left Arm
+  const leftArmGroup = new THREE.Group();
+  leftArmGroup.position.set(-1.5, 0.9, 0);
+  const armGeo = new THREE.BoxGeometry(1, 2, 1);
+  const leftArmMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(p.colors.leftArm), roughness: 0.35 });
+  const leftArmMesh = new THREE.Mesh(armGeo, leftArmMat);
+  leftArmMesh.position.set(0, -1, 0);
+  leftArmMesh.castShadow = true;
+  leftArmGroup.add(leftArmMesh);
+  group.add(leftArmGroup);
+
+  // Right Arm
+  const rightArmGroup = new THREE.Group();
+  rightArmGroup.position.set(1.5, 0.9, 0);
+  const rightArmMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(p.colors.rightArm), roughness: 0.35 });
+  const rightArmMesh = new THREE.Mesh(armGeo, rightArmMat);
+  rightArmMesh.position.set(0, -1, 0);
+  rightArmMesh.castShadow = true;
+  rightArmGroup.add(rightArmMesh);
+  group.add(rightArmGroup);
+
+  // Left Leg
+  const leftLegGroup = new THREE.Group();
+  leftLegGroup.position.set(-0.55, -1.0, 0);
+  const legGeo = new THREE.BoxGeometry(1, 2, 1);
+  const leftLegMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(p.colors.leftLeg), roughness: 0.35 });
+  const leftLegMesh = new THREE.Mesh(legGeo, leftLegMat);
+  leftLegMesh.position.set(0, -1, 0);
+  leftLegMesh.castShadow = true;
+  leftLegGroup.add(leftLegMesh);
+  group.add(leftLegGroup);
+
+  // Right Leg
+  const rightLegGroup = new THREE.Group();
+  rightLegGroup.position.set(0.55, -1.0, 0);
+  const rightLegMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(p.colors.rightLeg), roughness: 0.35 });
+  const rightLegMesh = new THREE.Mesh(legGeo, rightLegMat);
+  rightLegMesh.position.set(0, -1, 0);
+  rightLegMesh.castShadow = true;
+  rightLegGroup.add(rightLegMesh);
+  group.add(rightLegGroup);
+
+  // Clothes if equipped
+  if (p.shirtUrl) {
+    loadRobloxTexture(p.shirtUrl)
+      .then((tex) => {
+        const sMat = new THREE.MeshStandardMaterial({ map: tex, transparent: true, alphaTest: 0.05 });
+        const sTorso = new THREE.Mesh(new THREE.BoxGeometry(2.03, 2.03, 1.03), sMat);
+        sTorso.position.set(0, 0, 0);
+        group.add(sTorso);
+      })
+      .catch(() => {});
+  }
+
+  if (p.pantsUrl) {
+    loadRobloxTexture(p.pantsUrl)
+      .then((tex) => {
+        const pMat = new THREE.MeshStandardMaterial({ map: tex, transparent: true, alphaTest: 0.05 });
+        const pLeft = new THREE.Mesh(new THREE.BoxGeometry(1.03, 2.03, 1.03), pMat);
+        pLeft.position.set(0, -1, 0);
+        leftLegGroup.add(pLeft);
+        const pRight = new THREE.Mesh(new THREE.BoxGeometry(1.03, 2.03, 1.03), pMat);
+        pRight.position.set(0, -1, 0);
+        rightLegGroup.add(pRight);
+      })
+      .catch(() => {});
+  }
+
+  // 3D Billboard Name Tag
+  const tagCanvas = document.createElement('canvas');
+  tagCanvas.width = 512;
+  tagCanvas.height = 128;
+  const tagCtx = tagCanvas.getContext('2d')!;
+  tagCtx.fillStyle = 'rgba(0, 0, 0, 0.75)';
+  tagCtx.beginPath();
+  tagCtx.roundRect(16, 16, 480, 96, 24);
+  tagCtx.fill();
+  tagCtx.lineWidth = 4;
+  tagCtx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
+  tagCtx.stroke();
+
+  tagCtx.fillStyle = '#ffffff';
+  tagCtx.font = 'bold 38px sans-serif';
+  tagCtx.textAlign = 'center';
+  tagCtx.textBaseline = 'middle';
+  tagCtx.fillText(p.displayName || p.username, 256, 48);
+
+  tagCtx.fillStyle = '#a0a5aa';
+  tagCtx.font = '500 24px sans-serif';
+  tagCtx.fillText(`@${p.username}`, 256, 86);
+
+  const tagTex = new THREE.CanvasTexture(tagCanvas);
+  const tagGeo = new THREE.PlaneGeometry(3.6, 0.9);
+  const tagMat = new THREE.MeshBasicMaterial({ map: tagTex, transparent: true, side: THREE.DoubleSide });
+  const tagMesh = new THREE.Mesh(tagGeo, tagMat);
+  tagMesh.position.set(0, 2.4, 0);
+  group.add(tagMesh);
+
+  return {
+    group,
+    leftArm: leftArmGroup,
+    rightArm: rightArmGroup,
+    leftLeg: leftLegGroup,
+    rightLeg: rightLegGroup,
+  };
+}
+
 export default function GameWorld({
   game,
   colors,
@@ -53,6 +226,19 @@ export default function GameWorld({
   const [deathFlash, setDeathFlash] = useState(false);
   const [activeRuntime, setActiveRuntime] = useState<LuaRuntime | null>(null);
 
+  // Leaderboard state & Multiplayer Server Players
+  const [serverPlayers, setServerPlayers] = useState<ActiveServerPlayer[]>([]);
+  const [isLeaderboardOpen, setIsLeaderboardOpen] = useState(true);
+
+  // My current user credentials
+  const gameId = game?.id || 'default_place';
+  const currentUserRaw = localStorage.getItem('rovix_current_user_v1');
+  const currentUserObj = currentUserRaw ? JSON.parse(currentUserRaw) : null;
+  const myUid = auth.currentUser?.uid || currentUserObj?.uid || 'guest_' + Math.random().toString(36).substring(2, 7);
+  const myUsername = currentUserObj?.username || 'Player';
+  const myDisplayName = currentUserObj?.displayName || myUsername;
+  const lastPublishTime = useRef(0);
+
   const sceneRef = useRef<THREE.Scene | null>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
@@ -63,6 +249,68 @@ export default function GameWorld({
   const rightArmGroupRef = useRef<THREE.Group | null>(null);
   const leftLegGroupRef = useRef<THREE.Group | null>(null);
   const rightLegGroupRef = useRef<THREE.Group | null>(null);
+
+  // Remote Player 3D Meshes Ref
+  const remoteMeshesRef = useRef<
+    Map<
+      string,
+      {
+        group: THREE.Group;
+        leftArm: THREE.Group;
+        rightArm: THREE.Group;
+        leftLeg: THREE.Group;
+        rightLeg: THREE.Group;
+        targetPos: THREE.Vector3;
+        targetRotY: number;
+        isMoving: boolean;
+        isGrounded: boolean;
+        walkTime: number;
+      }
+    >
+  >(new Map());
+
+  // Realtime Firestore Sync
+  useEffect(() => {
+    if (!db) return;
+
+    const playersColRef = collection(db, 'games', gameId, 'players');
+    const unsub = onSnapshot(playersColRef, (snapshot) => {
+      const activeList: ActiveServerPlayer[] = [];
+      const now = Date.now();
+
+      snapshot.forEach((docSnap) => {
+        const p = docSnap.data() as ActiveServerPlayer;
+        if (p && p.updatedAt && now - p.updatedAt < 15000) {
+          activeList.push(p);
+        }
+      });
+
+      if (!activeList.some((p) => p.uid === myUid)) {
+        activeList.push({
+          uid: myUid,
+          username: myUsername,
+          displayName: myDisplayName,
+          colors: colors,
+          shirtUrl: shirtUrl,
+          pantsUrl: pantsUrl,
+          position: [0, 3.0, 0],
+          rotationY: Math.PI,
+          isMoving: false,
+          isGrounded: true,
+          updatedAt: Date.now(),
+        });
+      }
+
+      setServerPlayers(activeList);
+    });
+
+    return () => {
+      unsub();
+      try {
+        deleteDoc(doc(db, 'games', gameId, 'players', myUid));
+      } catch {}
+    };
+  }, [gameId, myUid, myUsername, myDisplayName, colors, shirtUrl, pantsUrl]);
 
   // Scattered ragdoll limbs on death
   const scatteredRagdollPartsRef = useRef<
@@ -895,6 +1143,99 @@ export default function GameWorld({
         if (rLeg) rLeg.rotation.x = THREE.MathUtils.lerp(rLeg.rotation.x, 0, 0.2);
       }
 
+      // --- MULTIPLAYER POSITION PUBLISHING & REMOTE LERP ---
+      const now = Date.now();
+      if (db && myUid && now - lastPublishTime.current > 80) {
+        lastPublishTime.current = now;
+        try {
+          setDoc(
+            doc(db, 'games', gameId, 'players', myUid),
+            {
+              uid: myUid,
+              username: myUsername,
+              displayName: myDisplayName,
+              colors,
+              shirtUrl,
+              pantsUrl,
+              position: [state.position.x, state.position.y, state.position.z],
+              rotationY: state.rotationY,
+              isMoving: state.isMoving,
+              isGrounded: state.isGrounded,
+              updatedAt: now,
+            },
+            { merge: true }
+          );
+        } catch {}
+      }
+
+      // Render & LERP remote players smoothly
+      if (sceneRef.current) {
+        serverPlayers.forEach((p) => {
+          if (p.uid === myUid) return;
+
+          let rData = remoteMeshesRef.current.get(p.uid);
+          if (!rData) {
+            const created = createRemotePlayerGroup(p);
+            sceneRef.current?.add(created.group);
+            rData = {
+              group: created.group,
+              leftArm: created.leftArm,
+              rightArm: created.rightArm,
+              leftLeg: created.leftLeg,
+              rightLeg: created.rightLeg,
+              targetPos: new THREE.Vector3(...p.position),
+              targetRotY: p.rotationY,
+              isMoving: p.isMoving,
+              isGrounded: p.isGrounded,
+              walkTime: 0,
+            };
+            remoteMeshesRef.current.set(p.uid, rData);
+          } else {
+            rData.targetPos.set(p.position[0], p.position[1], p.position[2]);
+            rData.targetRotY = p.rotationY;
+            rData.isMoving = p.isMoving;
+            rData.isGrounded = p.isGrounded;
+          }
+
+          // Smooth 60fps LERP interpolation towards target position & angle
+          rData.group.position.lerp(rData.targetPos, 0.22);
+
+          let diffRot = rData.targetRotY - rData.group.rotation.y;
+          while (diffRot < -Math.PI) diffRot += Math.PI * 2;
+          while (diffRot > Math.PI) diffRot -= Math.PI * 2;
+          rData.group.rotation.y += diffRot * 0.22;
+
+          // Remote limb animation
+          if (!rData.isGrounded) {
+            rData.leftArm.rotation.x = THREE.MathUtils.lerp(rData.leftArm.rotation.x, -Math.PI, 0.25);
+            rData.rightArm.rotation.x = THREE.MathUtils.lerp(rData.rightArm.rotation.x, -Math.PI, 0.25);
+            rData.leftLeg.rotation.x = THREE.MathUtils.lerp(rData.leftLeg.rotation.x, 0.28, 0.2);
+            rData.rightLeg.rotation.x = THREE.MathUtils.lerp(rData.rightLeg.rotation.x, -0.28, 0.2);
+          } else if (rData.isMoving) {
+            rData.walkTime += dt * 11.5;
+            const armSwing = Math.sin(rData.walkTime) * 0.75;
+            const legSwing = Math.sin(rData.walkTime) * 0.85;
+            rData.leftArm.rotation.x = -armSwing;
+            rData.rightArm.rotation.x = armSwing;
+            rData.leftLeg.rotation.x = legSwing;
+            rData.rightLeg.rotation.x = -legSwing;
+          } else {
+            rData.leftArm.rotation.x = THREE.MathUtils.lerp(rData.leftArm.rotation.x, 0, 0.2);
+            rData.rightArm.rotation.x = THREE.MathUtils.lerp(rData.rightArm.rotation.x, 0, 0.2);
+            rData.leftLeg.rotation.x = THREE.MathUtils.lerp(rData.leftLeg.rotation.x, 0, 0.2);
+            rData.rightLeg.rotation.x = THREE.MathUtils.lerp(rData.rightLeg.rotation.x, 0, 0.2);
+          }
+        });
+
+        // Cleanup left remote players
+        remoteMeshesRef.current.forEach((rData, uid) => {
+          if (!serverPlayers.some((sp) => sp.uid === uid) || uid === myUid) {
+            sceneRef.current?.remove(rData.group);
+            remoteMeshesRef.current.delete(uid);
+          }
+        });
+      }
+
       // Camera Orbit
       cam.distance += (cam.targetDistance - cam.distance) * 0.18;
       cam.targetLookAt.lerp(
@@ -1057,10 +1398,59 @@ export default function GameWorld({
         </div>
       </div>
 
-      <div className="absolute top-3 right-4 z-20">
-        <div className="px-3 py-1.5 rounded bg-[#18191b]/75 border border-neutral-800 text-xs font-semibold text-white backdrop-blur-md flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-          <span>Test123</span>
+      {/* Top Right Roblox Leaderboard */}
+      <div className="absolute top-3 right-4 z-40 flex flex-col items-end">
+        <div className="bg-[#18191b]/85 border border-neutral-700/80 rounded-lg shadow-2xl backdrop-blur-md overflow-hidden min-w-[220px] max-w-xs transition-all">
+          {/* Header */}
+          <div
+            onClick={() => setIsLeaderboardOpen(!isLeaderboardOpen)}
+            className="px-3 py-2 bg-[#222528]/90 flex items-center justify-between cursor-pointer border-b border-neutral-700/60 hover:bg-[#2a2d32] transition-colors"
+          >
+            <div className="flex items-center gap-2">
+              <Users className="w-4 h-4 text-blue-400" />
+              <span className="text-xs font-bold text-white tracking-wide">
+                Players ({serverPlayers.length})
+              </span>
+            </div>
+            <button type="button" className="text-neutral-400 hover:text-white">
+              {isLeaderboardOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+            </button>
+          </div>
+
+          {/* Player List */}
+          {isLeaderboardOpen && (
+            <div className="divide-y divide-neutral-800/80 max-h-60 overflow-y-auto">
+              {serverPlayers.map((p) => {
+                const isMe = p.uid === myUid;
+                return (
+                  <div
+                    key={p.uid}
+                    className={`px-3 py-2 flex items-center justify-between text-xs transition-colors ${
+                      isMe ? 'bg-blue-600/15 text-white' : 'hover:bg-neutral-800/50 text-neutral-300'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5 overflow-hidden">
+                      <div className="w-6 h-6 rounded-full bg-blue-600 flex items-center justify-center font-bold text-[10px] text-white shrink-0 shadow">
+                        {(p.displayName || p.username).charAt(0).toUpperCase()}
+                      </div>
+                      <div className="truncate">
+                        <div className="font-bold text-white truncate flex items-center gap-1">
+                          <span>{p.displayName || p.username}</span>
+                          {isMe && <span className="text-[10px] text-blue-400 font-semibold">(You)</span>}
+                        </div>
+                        <div className="text-[10px] text-neutral-400 truncate">@{p.username}</div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 shrink-0 pl-2">
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                      <span className="text-[10px] font-mono text-neutral-400">18ms</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
 

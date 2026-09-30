@@ -11,7 +11,8 @@ import {
   getDoc,
   UserProfileData,
 } from '../../utils/firebase.ts';
-import { DEFAULT_AVATAR_COLORS } from '../../utils/inventoryStorage.ts';
+import { DEFAULT_AVATAR_COLORS, saveAvatarToStorage, saveStoredInventory, INITIAL_SHIRTS, INITIAL_PANTS } from '../../utils/inventoryStorage.ts';
+import { saveOwnedBackgroundIds, setEquippedBackgroundId } from '../../utils/backgroundsStorage.ts';
 
 interface AuthPageProps {
   onAuthSuccess: (profile: UserProfileData) => void;
@@ -117,6 +118,19 @@ export default function AuthPage({ onAuthSuccess }: AuthPageProps) {
           console.warn('Firestore setDoc notice (using local persistence):', dbErr);
         }
 
+        // Reset local storage for new user so old device state never bleeds into new account
+        saveOwnedBackgroundIds([]);
+        setEquippedBackgroundId(null);
+        saveStoredInventory({
+          shirts: INITIAL_SHIRTS,
+          pants: INITIAL_PANTS,
+        });
+        saveAvatarToStorage({
+          colors: DEFAULT_AVATAR_COLORS,
+          shirtUrl: INITIAL_SHIRTS[0].dataUrl,
+          pantsUrl: INITIAL_PANTS[0].dataUrl,
+        });
+
         // Store user profile locally for instant restore
         localStorage.setItem('rovix_current_user_v1', JSON.stringify(userDocData));
         onAuthSuccess(userDocData);
@@ -158,6 +172,10 @@ export default function AuthPage({ onAuthSuccess }: AuthPageProps) {
             createdAt: new Date().toISOString(),
           };
         }
+
+        // Sync local storage with user profile
+        saveOwnedBackgroundIds(profileData.ownedBackgrounds || []);
+        setEquippedBackgroundId(profileData.equippedBackgroundId || null);
 
         localStorage.setItem('rovix_current_user_v1', JSON.stringify(profileData));
         onAuthSuccess(profileData);

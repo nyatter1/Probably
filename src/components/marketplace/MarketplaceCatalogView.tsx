@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ShoppingBag, Star, CheckCircle2, Image as ImageIcon } from 'lucide-react';
+import { ShoppingBag, Star, CheckCircle2, Image as ImageIcon, Sparkles } from 'lucide-react';
 import {
   getAllMarketplaceItems,
   MarketplaceItem,
@@ -26,18 +26,19 @@ export default function MarketplaceCatalogView({
   activeShirtUrl,
   activePantsUrl,
 }: MarketplaceCatalogViewProps) {
-  const [filterType, setFilterType] = useState<'all' | 'shirt' | 'pants' | 'backgrounds'>('all');
+  const [filterType, setFilterType] = useState<'all' | 'shirt' | 'pants' | 'backgrounds' | 'borders'>('all');
   const clothingItems = getAllMarketplaceItems();
   const ownedBackgroundIds = getOwnedBackgroundIds();
   const equippedBackgroundId = getEquippedBackgroundId();
 
   const filteredClothing = clothingItems.filter((item) => {
     if (filterType === 'all') return true;
-    if (filterType === 'backgrounds') return false;
+    if (filterType === 'backgrounds' || filterType === 'borders') return false;
     return item.clothingType === filterType;
   });
 
   const showBackgrounds = filterType === 'all' || filterType === 'backgrounds';
+  const showBorders = filterType === 'borders';
 
   return (
     <div className="flex-1 bg-[#191b1d] text-[#e3e5e8] overflow-y-auto min-h-screen select-none font-sans">
@@ -101,8 +102,38 @@ export default function MarketplaceCatalogView({
               <ImageIcon className="w-3.5 h-3.5" />
               <span>Backgrounds ({MARKETPLACE_BACKGROUNDS.length})</span>
             </button>
+            <button
+              type="button"
+              onClick={() => setFilterType('borders')}
+              className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
+                filterType === 'borders'
+                  ? 'bg-amber-600 text-white'
+                  : 'text-amber-400/90 hover:text-amber-300'
+              }`}
+            >
+              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+              <span>Borders (Coming Soon)</span>
+            </button>
           </div>
         </div>
+
+        {/* SECTION: Borders (Coming Soon) */}
+        {showBorders && (
+          <div className="py-16 text-center space-y-4 bg-[#202225] border border-neutral-800 rounded-2xl p-8">
+            <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center mx-auto shadow-lg">
+              <Sparkles className="w-8 h-8" />
+            </div>
+            <h2 className="text-xl font-bold text-white">Avatar Profile Borders (Coming Soon)</h2>
+            <p className="text-xs text-neutral-400 max-w-md mx-auto leading-relaxed">
+              Custom animated profile borders, neon avatar frames, and glowing edges are currently in development for the Rovix Marketplace!
+            </p>
+            <div className="pt-2">
+              <span className="px-3 py-1 rounded-full bg-amber-500/20 border border-amber-500/30 text-amber-300 text-xs font-bold">
+                Coming Soon
+              </span>
+            </div>
+          </div>
+        )}
 
         {/* SECTION 1: Backgrounds (when active or in all) */}
         {showBackgrounds && (
